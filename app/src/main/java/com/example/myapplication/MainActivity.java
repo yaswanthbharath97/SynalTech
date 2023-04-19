@@ -1,17 +1,8 @@
 package com.example.myapplication;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-
 import android.Manifest;
-
-
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -24,6 +15,12 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -60,11 +57,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+
                     enableDisable();
-                    Intent qrIntent=new Intent(MainActivity.this,QRCode_Scanner.class);
+                    Intent qrIntent=new Intent(MainActivity.this,QRCodeResultAndWifi.class);
+                    startActivity(qrIntent);
+                }
+                else {
+
+                    Intent qrIntent=new Intent(MainActivity.this,QRCodeResultAndWifi.class);
                     startActivity(qrIntent);
                 }
             }
+
         });
 
 
