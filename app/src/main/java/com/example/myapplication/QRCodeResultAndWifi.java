@@ -1,177 +1,158 @@
 package com.example.myapplication;
 
 import android.Manifest;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
-import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.text.InputType;
-import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class QRCodeResultAndWifi extends AppCompatActivity {
+    private static final int MY_PERMISSIONS_CHANGE_WIFI_STATE = 2;
     private ListView wifiList1;
-    private WifiManager wifiManager;
+    private WifiConfiguration wifiConfiguration;
     private final int MY_PERMISSIONS_ACCESS_COARSE_LOCATION = 1;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_qrcode_result_and_wifi);
-        wifiList1 = findViewById(R.id.listWifi);
-        wifiManager = (WifiManager) getApplicationContext().getSystemService(Activity.WIFI_SERVICE);
 
-        if (ActivityCompat.checkSelfPermission(QRCodeResultAndWifi.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED||
-                ActivityCompat.checkSelfPermission(QRCodeResultAndWifi.this, Manifest.permission.ACCESS_WIFI_STATE) != PackageManager.PERMISSION_GRANTED ||
-                ActivityCompat.checkSelfPermission(QRCodeResultAndWifi.this, Manifest.permission.CHANGE_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(QRCodeResultAndWifi.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, MY_PERMISSIONS_ACCESS_COARSE_LOCATION);
-        } else {
-             enableWifi();
-            startWifiScan();
+        // Check if the app has the required permission to access location
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+              enableWifi();
         }
 
     }
+
     private void enableWifi() {
-        // If Wi-Fi is not enabled, enable it
-        if (!wifiManager.isWifiEnabled()) {
-            wifiManager.setWifiEnabled(true);
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CHANGE_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CHANGE_WIFI_STATE}, MY_PERMISSIONS_CHANGE_WIFI_STATE);
+        } else {
+            try {
+                if (!wifiManager.isWifiEnabled()) {
+
+
+                    wifiManager.setWifiEnabled(true);
+                    Toast.makeText(QRCodeResultAndWifi.this, "Enabled WiFi", Toast.LENGTH_SHORT).show();
+                }
+                List<ScanResult> scanResults = wifiManager.getScanResults();
+                wifiList1 = findViewById(R.id.listWifi);
+
+                ArrayAdapter<String> adapter = new ArrayAdapter<>(QRCodeResultAndWifi.this, android.R.layout.simple_list_item_1);
+
+                for (ScanResult result : scanResults) {
+                    int signalStrength = WifiManager.calculateSignalLevel(result.level, 5);
+                    String ssid = result.SSID;
+                    if (ssid != null && !ssid.isEmpty()) {
+                        adapter.add(ssid+ " ( " + signalStrength + "/5)");
+                    }
+                }
+                wifiList1.setAdapter(adapter);
+                wifiList1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                    @Override
+                    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                        String item = (String) parent.getItemAtPosition(position);
+                        String ssid = item.split(" ")[0]; // get the SSID from the selected item
+                       // replace "password" with the actual password
+                        AlertDialog.Builder builder = new AlertDialog.Builder(QRCodeResultAndWifi.this);
+                        builder.setTitle("Enter Wi-Fi Password");
+
+                        // Set up the input
+                        final EditText input = new EditText(QRCodeResultAndWifi.this);
+                        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                        builder.setView(input);
+
+                        // Set up the buttons
+                        builder.setPositiveButton("Connect", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                String password = input.getText().toString();
+                                connectToWifi(ssid, password);
+                            }
+                        });
+                        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                dialog.cancel();
+                            }
+                        });
+
+                        builder.show();
+                    }
+                });
+                // process scan results here
+            } catch (SecurityException e) {
+                Toast.makeText(this, "Could not enable WiFi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         }
     }
-    private void connectToWifi(String ssid) {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+
+    private void connectToWifi(String ssid, String password) {
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+
+        WifiConfiguration wifiConfig = new WifiConfiguration();
+        wifiConfig.SSID = "\"" + ssid + "\"";
+        wifiConfig.preSharedKey = "\"" + password + "\"";
+        int networkId = wifiManager.addNetwork(wifiConfig);
+        if (networkId == -1)
+        {
+            Toast.makeText(this, "Failed to add Wi-Fi network configuration", Toast.LENGTH_SHORT).show();
             return;
         }
-        List<WifiConfiguration> configuredNetworks = wifiManager.getConfiguredNetworks();
-        for (WifiConfiguration wifiConfiguration : configuredNetworks) {
-            if (wifiConfiguration.SSID.equals("\"" + ssid + "\"")) {
-                wifiManager.enableNetwork(wifiConfiguration.networkId, true);
-                break;
-            }
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            return;
         }
-    }
-    private void startWifiScan() {
-        registerReceiver(wifiReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
-        wifiManager.startScan();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == MY_PERMISSIONS_ACCESS_COARSE_LOCATION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startWifiScan();
-            }
-        }
-    }
-    private final BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (ActivityCompat.checkSelfPermission(QRCodeResultAndWifi.this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
-
-                return;
-            }
-            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-
-
-            List<ScanResult> scanResults = wifiManager.getScanResults();
-            List<String>wifiList=new ArrayList<>();
-            for(ScanResult scanResult:scanResults)
+        List<WifiConfiguration> configuredNetwork = wifiManager.getConfiguredNetworks();
+        for (WifiConfiguration config : configuredNetwork)
+        {
+            if (config.networkId == networkId)
             {
-                int signalStrength = WifiManager.calculateSignalLevel(scanResult.level, 5);
-                String ssid = scanResult.SSID;
-                if (ssid != null && !ssid.isEmpty()) {
-                    wifiList.add(ssid + " ( " + signalStrength + "/5)");
-                }
+                wifiManager.enableNetwork(networkId, true);
             }
-            ArrayAdapter<String>adapter=new ArrayAdapter<>(context, android.R.layout.simple_list_item_1,wifiList);
-                wifiList1.setAdapter(adapter);
-
-            wifiList1.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-                @Override
-                public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                    String selectedWifi = (String) parent.getItemAtPosition(position);
-                    String[] parts = selectedWifi.split("\\(");
-                    String ssid = parts[0];
-                    Log.d("SelectedWifi", "Selected Wi-Fi: " + ssid);
-
-                    WifiConfiguration  wifiConfig=new WifiConfiguration();
-                    wifiConfig.SSID="\"" + ssid + "\"";
-                    wifiConfig.status = WifiConfiguration.Status.ENABLED;
-                    wifiConfig.priority = 40;
-
-
-                    final EditText passwordEditText=new EditText(QRCodeResultAndWifi.this);
-                    passwordEditText.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                    new AlertDialog.Builder(QRCodeResultAndWifi.this)
-                            .setTitle("Enter WiFi Password ") .setMessage("Enter password for " + ssid + ":")
-                            .setView(passwordEditText)
-                            .setPositiveButton("Connect", new DialogInterface.OnClickListener()
-                            {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    String password=passwordEditText.getText().toString();
-                                    if(!password.isEmpty()) {
-                                        wifiConfig.preSharedKey = "\"" + password + "\"";
-                                    }
-                                         int networkId = wifiManager.addNetwork(wifiConfig);
-                                    if (networkId == -1) {
-                                        Log.e("Wifi", "Failed to add network: " + wifiConfig);
-                                        return;
-                                    }
-                                           wifiManager.disconnect();
-                                           wifiManager.enableNetwork(networkId,true);
-                                           wifiManager.reconnect();
-
-                                }
-                            }).setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                                public void onClick(DialogInterface dialog, int whichButton) {
-                                    // Do nothing.
-                                }
-                            })
-                            .show();
-                }
-            });
+            else
+            {
+                wifiManager.disableNetwork(config.networkId);
+            }
         }
-    };
-
-    protected void onResume() {
-        super.onResume();
-        wifiManager.startScan();
+        wifiManager.reconnect();
+        Toast.makeText(this, "Connected to Wi-Fi network " + ssid, Toast.LENGTH_SHORT).show();
     }
 
+     @Override
+     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == MY_PERMISSIONS_ACCESS_COARSE_LOCATION)
+        {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+            {
+                enableWifi();
+            } else {
+                Toast.makeText(this, "Location permission denied", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
 }

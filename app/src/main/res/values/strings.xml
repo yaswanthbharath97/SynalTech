@@ -2,4 +2,5 @@
     <string name="app_name">My Application</string>
     <string name="start">start</string>
     <string name="scanner_overlay" />
+    <string name="hello">hello</string>
 </resources>
